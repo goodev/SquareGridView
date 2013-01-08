@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<org.goodev.squaregrid.SquareLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    >
+<!--
+    android:background="@drawable/grid_item_border"
+ -->
+    <ImageView
+        android:id="@+id/icon"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/ic_launcher" />
+
+    <TextView
+        android:id="@+id/text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#88000000"
+        android:textColor="#FFFFFF"
+        android:layout_alignParentBottom="true"
+        android:gravity="center_horizontal"
+        />
+    <View
+        android:id="@+id/press"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+      android:background="@drawable/item_press_bg"
+        />
+</org.goodev.squaregrid.SquareLayout>

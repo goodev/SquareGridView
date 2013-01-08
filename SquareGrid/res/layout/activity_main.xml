@@ -1,0 +1,19 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+     >
+    <GridView
+        android:id="@+id/grid"
+        android:background="@color/grid_bg_color"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:columnWidth="@dimen/itemSize"
+        android:gravity="center"
+        android:horizontalSpacing="4dp"
+        android:verticalSpacing="4dp"
+        android:numColumns="auto_fit"
+        android:scrollbars="vertical"
+        android:scrollbarStyle="insideOverlay"
+        android:stretchMode="columnWidth"
+        />
+</RelativeLayout>
