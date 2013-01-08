@@ -3,9 +3,6 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     >
-<!--
-    android:background="@drawable/grid_item_border"
- -->
     <ImageView
         android:id="@+id/icon"
         android:layout_width="match_parent"
@@ -26,6 +23,6 @@
         android:id="@+id/press"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-      android:background="@drawable/item_press_bg"
+        android:background="@drawable/item_press_bg"
         />
 </org.goodev.squaregrid.SquareLayout>
