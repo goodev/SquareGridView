@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+     <dimen name="itemSize">100dp</dimen>
+     <dimen name="itemBorderWidth">2dp</dimen>
+     <dimen name="gridMarginTopLeft">-2.5dp</dimen>
+     <dimen name="gridMarginBottomRight">-4dp</dimen>
+</resources>

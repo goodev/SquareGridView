@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="list_divider">#AA66cc</color>
+    <color name="focus_color">#AA000000</color>
+</resources>

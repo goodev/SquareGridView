@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" >
+<!-- 为了消除图片下面背景的过度绘制 这里为透明的背景 -->
+    <solid android:color="@android:color/transparent" />
+
+    <padding
+        android:bottom="@dimen/itemBorderWidth"
+        android:left="@dimen/itemBorderWidth"
+        android:right="@dimen/itemBorderWidth"
+        android:top="@dimen/itemBorderWidth" />
+
+    <stroke
+        android:width="@dimen/itemBorderWidth"
+        android:color="@color/list_divider" />
+
+</shape>

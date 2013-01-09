@@ -1,0 +1,778 @@
+SquareGridView性能优化
+在前一篇 <a href="http://yunfeng.sinaapp.com/?p=465" target="_blank">Android实现自适应正方形GridView</a>中，虽然实现了正方形GridItem效果，但是如果用<a title="Android 性能分析案例" href="http://yunfeng.sinaapp.com/?p=458">Android 性能分析案例</a> 中 提到的方式来看看Overdraw问题比较严重。
+
+先看看截图：
+
+[caption id="" align="alignnone" width="500" caption="SquareGridView的Overdraw问题"]<a href="http://yunzaiqianfeng.b0.upaiyun.com/android/squaregridview/o1.png"><img title="SquareGridView的Overdraw问题" src="http://yunzaiqianfeng.b0.upaiyun.com/android/squaregridview/o1.png!256" alt="SquareGridView的Overdraw问题" width="500" height="889" /></a>[/caption]
+
+蓝色代表一次过度绘制，绿色代表二次过度绘制，而浅红色代表三次过度绘制， 和 <a href="https://play.google.com/store/apps/details?id=com.jv.falcon.pro" target="_blank">Falcon Pro</a>  应用比起来还算不错，没有大面积的浅红色和红色。 \(^o^)/~
+
+如果您只满足于此，则可以跳过下面的 文字了， ^_^。 这篇文章的目标是把上图的效果优化为下图的效果：
+
+[caption id="" align="alignnone" width="500" caption="优化后的SquareGridView"]<a href="http://yunzaiqianfeng.b0.upaiyun.com/android/squaregridview/o2.png"><img title="优化后的SquareGridView" src="http://yunzaiqianfeng.b0.upaiyun.com/android/squaregridview/o2.png!256" alt="优化后的SquareGridView" width="500" height="889" /></a>[/caption]
+
+上图看起来怎么样？只有少量的一次过度绘制和二次过度绘制， 超过三次的过度绘制只出现在按下状态一个Item中。
+
+如果您对如何实现上面优化过的效果感兴趣，请继续阅读！
+
+<span style="color: #800080;"><strong>消除过度绘制</strong></span>
+
+首先去掉Activity的背景，可以通过自定义Theme实现也可以通过在MainActivity的onCreate函数中设置窗口背景来实现，
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        getWindow().setBackgroundDrawable(null);
+        GridView view = (GridView) findViewById(R.id.grid);
+        view.setAdapter(new GridAdapter(getBaseContext()));
+    }
+
+然后再次运行程序，发现头像区域已经从绿色（二次过度绘制）变为蓝色（一次过度绘制）了，这里头像的一次过度绘制是由于GridView的背景导致的，和 Android 性能分析案例 http://yunfeng.sinaapp.com/?p=458 中 Falcon Pro  应用 的图片背景原因一样。 要修改这个问题 我们需要把GridView的背景取消，然后设置GridView的android:horizontalSpacing 和 android:verticalSpacing 为0，修改后的activity_main.xml中的GridView代码如下：
+
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    >
+    <GridView
+        android:id="@+id/grid"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:columnWidth="@dimen/itemSize"
+        android:gravity="center"
+        android:listSelector="@android:color/transparent"
+        android:horizontalSpacing="0dp"
+        android:verticalSpacing="0dp"
+        android:numColumns="auto_fit"
+        android:scrollbars="vertical"
+        android:scrollbarStyle="insideOverlay"
+        android:stretchMode="columnWidth"
+        />
+</RelativeLayout>
+
+而每个图片的边框通过在每个GridItem上绘制边框背景实现，在item.xml布局文件中给 org.goodev.squaregrid.SquareLayout添加边框背景android:background
+<?xml version="1.0" encoding="utf-8"?>
+<org.goodev.squaregrid.SquareLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/grid_item_border"
+    >
+    ...
+</org.goodev.squaregrid.SquareLayout>
+
+上面的背景对应drawable目录下的grid_item_border.xml文件
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/item_border" android:state_selected="true"/>
+    <item android:drawable="@drawable/item_border" android:state_pressed="true"/>
+    <item android:drawable="@drawable/item_border"/>
+</selector>
+注意:上面使用了selector，来支持不同状态的边框颜色修改，如果无此需求，则可以直接在org.goodev.squaregrid.SquareLayout中设置背景为@drawable/item_border。
+item_border.xml文件内容如下：
+
+<?xml version="1.0" encoding="UTF-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" >
+    <!-- 为了消除图片下面背景的过度绘制 这里为透明的背景 -->
+    <solid android:color="@android:color/transparent" />
+    <padding
+        android:bottom="@dimen/itemBorderWidth"
+        android:left="@dimen/itemBorderWidth"
+        android:right="@dimen/itemBorderWidth"
+        android:top="@dimen/itemBorderWidth" />
+    <stroke
+        android:width="@dimen/itemBorderWidth"
+        android:color="@color/list_divider" />
+</shape>
+
+按照上面的方式修改后，头像区域就没有过度绘制了，感兴趣的同学可以下载这个APK在手机上运行下看看效果。 https://github.com/goodev/SquareGridView/raw/master/SquareGrid/apks/SquareGrid1.apk
+
+最后一行的残影问题
+
+由于GridView显示的数目不一定刚好可以填充最后一行，比如一共显示10个条目，一行显示3个，那么第三行就只显示第一个，而后面两个是空白的。 按照上面的时候，当用户滚动到最后一行的时候， 由于后面两个是空白的，没有像素的区域，系统不会重绘这两个Item所占的区域，会导致滚动后显示上一行内容留下的残影
+http://yunzaiqianfeng.b0.upaiyun.com/android/squaregridview/o4.png
+
+要解决这个问题，则需要自定义GridView，在布局的时候计算显示Item的个数和每行显示几个item. 看看最后一行是否填满，如果没有则用NULL item补充，在GridAdapter判断为NULL item的时候，返回一个特殊的背景View即可。
+
+创建一个org.goodev.squaregrid.OptimizeGridView类，代码如下
+package org.goodev.squaregrid;
+
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.util.AttributeSet;
+import android.widget.Adapter;
+import android.widget.GridView;
+
+public class OptimizeGridView extends GridView {
+    /**
+     * 要用能包含重复元素的集合
+     *
+     * @param <T>
+     */
+    interface OptimizeGridAdapter<T> {
+        List<T> getItems();
+        /**
+         * Should notify the listView data is changed
+         *
+         * @param items
+         */
+        void setItems(List<T> items);
+        T getNullItem();
+        boolean isNullItem(T item);
+    }
+
+    public OptimizeGridView(Context context) {
+        super(context);
+    }
+
+    public OptimizeGridView(Context context, AttributeSet attrs) {
+        super(context, attrs);
+    }
+
+    public OptimizeGridView(Context context, AttributeSet attrs, int defStyle) {
+        super(context, attrs, defStyle);
+    }
+
+    @SuppressLint("DrawAllocation")
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+
+        int numColumns = AUTO_FIT;
+        final boolean isApi11 = getResources().getBoolean(R.bool.api11);
+        if (isApi11) {
+            // API level 11 引入该函数，在低于11版本中 使用反射获取列数
+            numColumns = getNumColumns();
+        } else {
+            try {
+                Field numColumnsField = GridView.class.getDeclaredField("mNumColumns");
+                numColumnsField.setAccessible(true);
+                numColumns = numColumnsField.getInt(this);
+            } catch (IllegalArgumentException e1) {
+                e1.printStackTrace();
+            } catch (NoSuchFieldException e1) {
+                e1.printStackTrace();
+            } catch (IllegalAccessException e1) {
+                e1.printStackTrace();
+            }
+        }
+        if (numColumns != AUTO_FIT) {
+            final Adapter adapter = getAdapter();
+            if (!(adapter instanceof OptimizeGridAdapter)) {
+                return;
+            }
+            final int count = adapter.getCount();
+            final int remainder = count % numColumns;
+            if (remainder != 0) {
+                final int diff = numColumns - remainder;
+                final OptimizeGridAdapter adapter2 = (OptimizeGridAdapter) adapter;
+                final List items = new ArrayList();
+                items.addAll(adapter2.getItems());
+                for (int i = 0; i < diff; i++) {
+                    items.add(adapter2.getNullItem());
+                }
+                adapter2.setItems(items);
+            }
+        }
+    }
+
+}
+
+覆写了 GridView的onMeasure类，GridView调用完该类后会计算出每行显示多少个Item，具体数字保存在变量mNumColumns中，而在Api 11之前版本我们只能通过反射来获取该变量的值。
+在上面的类中还定义了一个接口OptimizeGridAdapter，该接口定义了几个函数用来支持添加NULL item到Adapter中来填充最后一行。
+
+然后修改org.goodev.squaregrid.GridAdapter类实现OptimizeGridAdapter接口即可。
+
+package org.goodev.squaregrid;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.goodev.squaregrid.OptimizeGridView.OptimizeGridAdapter;
+
+import android.content.Context;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
+import android.widget.ImageView;
+import android.widget.TextView;
+
+public class GridAdapter extends BaseAdapter implements OptimizeGridAdapter<GridAdapter.Item>{
+    public static class Item{
+        public String text;
+        public int resId;
+    }
+
+    private List<Item> mItems = new ArrayList<GridAdapter.Item>();
+    private Context mContext;
+    public GridAdapter(Context context) {
+        for (int i = 0; i < 100; i++) {
+            Item object = new Item();
+            object.text = "Text "+i;
+            object.resId = R.drawable.icon;
+            mItems.add(object);
+        }
+        mContext = context;
+    }
+
+    @Override
+    public int getCount() {
+        return mItems.size();
+    }
+
+    @Override
+    public Object getItem(int position) {
+        return mItems.get(position);
+    }
+
+    @Override
+    public long getItemId(int position) {
+        return position;
+    }
+
+    @Override
+    public View getView(int position, View convertView, ViewGroup parent) {
+        if(convertView == null) {
+            convertView = LayoutInflater.from(mContext).inflate(R.layout.item, null);
+        }
+        ImageView image = (ImageView) convertView.findViewById(R.id.icon);
+        TextView text = (TextView) convertView.findViewById(R.id.text);
+        View press = convertView.findViewById(R.id.press);
+        Item item = (Item) getItem(position);
+        //解决残影问题，这里判断如果是NULL item则只显示一个白色背景
+        if(isNullItem(item)) {
+            convertView.setBackgroundResource(R.drawable.grid_bg);
+            image.setVisibility(View.INVISIBLE);
+            text.setVisibility(View.INVISIBLE);
+            press.setVisibility(View.INVISIBLE);
+            return convertView;
+        }
+        image.setVisibility(View.VISIBLE);
+        text.setVisibility(View.VISIBLE);
+        press.setVisibility(View.VISIBLE);
+        convertView.setBackgroundResource(R.drawable.grid_item_border);
+        image.setImageResource(item.resId);
+        text.setText(item.text);
+        return convertView;
+    }
+
+
+    public static Item NULL_ITEM = new Item();
+    @Override
+    public List<Item> getItems() {
+        return mItems;
+    }
+
+    @Override
+    public void setItems(List<Item> items) {
+        mItems = items;
+        notifyDataSetChanged();
+    }
+
+    @Override
+    public Item getNullItem() {
+        return NULL_ITEM;
+    }
+
+    @Override
+    public boolean isNullItem(Item item) {
+        return item == NULL_ITEM;
+    }
+
+
+}
+
+最后修改activity_main.xml布局文件使用新的 org.goodev.squaregrid.OptimizeGridView 自定义GridView即可
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    >
+    <org.goodev.squaregrid.OptimizeGridView
+        android:id="@+id/grid"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:columnWidth="@dimen/itemSize"
+        android:gravity="center"
+        android:listSelector="@android:color/transparent"
+        android:horizontalSpacing="0dp"
+        android:verticalSpacing="0dp"
+        android:numColumns="auto_fit"
+        android:scrollbars="vertical"
+        android:scrollbarStyle="insideOverlay"
+        android:stretchMode="columnWidth"
+        />
+</RelativeLayout>
+
+完成上面修改 再运行程序，可以看到现在的结果如下图所示，没有残影了。
+http://yunzaiqianfeng.b0.upaiyun.com/android/squaregridview/o5.png
+
+感兴趣的同学可以现在这个APK体验下。 https://github.com/goodev/SquareGridView/raw/master/SquareGrid/apks/OptimizeSquareGrid1.apk
+
+GridView四周的边框
+
+细心的同学可能发现了，由于GridItem的边框是在Item View中实现的，所以在GridView四周也会出现这个边框，如上图左右的紫色边框和下方的紫色边框。消除该边框也是非常简单的，只需要设置GridView的layout_marginXXX值为item边框的负值即可。
+在activity_main.xml中的org.goodev.squaregrid.OptimizeGridView控件上添加layout_margin属性：
+<org.goodev.squaregrid.OptimizeGridView
+        android:id="@+id/grid"
+        android:layout_marginLeft="@dimen/gridMarginTopLeft"
+        android:layout_marginRight="@dimen/gridMarginBottomRight"
+        android:layout_marginTop="@dimen/gridMarginTopLeft"
+        android:layout_marginBottom="@dimen/gridMarginBottomRight"
+
+最终结果如下：
+http://yunzaiqianfeng.b0.upaiyun.com/android/squaregridview/o6.png
+
+示例APK下载 https://github.com/goodev/SquareGridView/raw/master/SquareGrid/apks/OptimizeSquareGrid.apk
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+01-09 10:42:49.390: D/xmppPush(19775): push service commnad recieve
+01-09 10:42:49.390: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:42:49.390: E/xmppPush(19775): we can not connect the network
+01-09 10:42:54.280: D/定位(19775): use current:uploadMyLocation lat:39.923114 long:116.46203
+01-09 10:42:54.380: D/xmppPush(19775): push service commnad recieve
+01-09 10:42:54.380: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:42:54.380: E/xmppPush(19775): we can not connect the network
+01-09 10:42:58.510: D/定位(19775): use current:uploadMyLocation lat:39.923114 long:116.46203
+01-09 10:43:00.245: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:43:00.245: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:43:00.250: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:43:00.250: D/SMACK(19775): 10:43:00 上午 SENT (1081851280):
+01-09 10:43:10.020: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:43:10.020: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:43:10.035: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:43:10.045: D/SMACK(19775): 10:43:10 上午 SENT (1081851280):
+01-09 10:43:25.260: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:43:25.260: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:43:25.280: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:43:25.285: D/SMACK(19775): 10:43:25 上午 SENT (1081851280):
+01-09 10:43:35.000: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:43:35.000: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:43:35.005: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:43:35.005: D/SMACK(19775): 10:43:35 上午 SENT (1081851280):
+01-09 10:43:50.260: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:43:50.260: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:43:50.280: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:43:50.290: D/SMACK(19775): 10:43:50 上午 SENT (1081851280):
+01-09 10:44:00.000: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:44:00.000: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:44:00.120: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:44:00.125: D/SMACK(19775): 10:44:00 上午 SENT (1081851280):
+01-09 10:44:15.260: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:44:15.260: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:44:15.265: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:44:15.270: D/SMACK(19775): 10:44:15 上午 SENT (1081851280):
+01-09 10:44:25.005: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:44:25.005: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:44:25.010: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:44:25.015: D/SMACK(19775): 10:44:25 上午 SENT (1081851280):
+01-09 10:44:25.290: D/networkobserver(19775): PfDataTransReceiver receive action android.net.conn.CONNECTIVITY_CHANGE
+01-09 10:44:25.515: D/networkobserver(19775): 有网络了，请重连xmpp
+01-09 10:44:25.610: D/networkobserver(19775): PfDataTransReceiver receive action android.net.conn.CONNECTIVITY_CHANGE
+01-09 10:44:25.615: D/networkobserver(19775): 有网络了，请重连xmpp
+01-09 10:44:25.620: D/xmppPush(19775): push service commnad recieve
+01-09 10:44:25.620: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:44:25.620: E/xmppPush(19775): we can not connect the network
+01-09 10:44:25.620: D/xmppPush(19775): push service commnad recieve
+01-09 10:44:25.620: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:44:25.620: E/xmppPush(19775): we can not connect the network
+01-09 10:44:27.655: D/dalvikvm(19775): GC_CONCURRENT freed 1919K, 53% free 4248K/9031K, external 7848K/8037K, paused 9ms+4ms
+01-09 10:44:30.950: D/xmppPush(19775): push service commnad recieve
+01-09 10:44:30.950: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:44:30.950: E/xmppPush(19775): we can not connect the network
+01-09 10:44:31.055: D/xmppPush(19775): push service commnad recieve
+01-09 10:44:31.055: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:44:31.055: E/xmppPush(19775): we can not connect the network
+01-09 10:44:33.700: D/dalvikvm(19775): GC_CONCURRENT freed 2086K, 54% free 4210K/9031K, external 7848K/8037K, paused 2ms+4ms
+01-09 10:44:36.120: D/定位(19775): use current:uploadMyLocation lat:39.923114 long:116.46203
+01-09 10:44:36.180: D/定位(19775): use current:uploadMyLocation lat:39.923114 long:116.46203
+01-09 10:44:40.260: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:44:40.260: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:44:40.270: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:44:40.280: D/SMACK(19775): 10:44:40 上午 SENT (1081851280):
+01-09 10:44:50.015: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:44:50.015: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:44:50.025: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:44:50.035: D/SMACK(19775): 10:44:50 上午 SENT (1081851280):
+01-09 10:45:00.470: D/xmppPush(19775): receive the timer
+01-09 10:45:00.470: D/xmppPush(19775): network status=0
+01-09 10:45:00.470: D/xmppPush(19775): xmppstatus=4
+01-09 10:45:00.475: D/xmppPush(19775): 网络不可用
+01-09 10:45:05.260: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:45:05.260: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:45:05.280: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:45:05.285: D/SMACK(19775): 10:45:05 上午 SENT (1081851280):
+01-09 10:45:14.000: D/dalvikvm(19775): GC_EXPLICIT freed 276K, 55% free 4139K/9031K, external 7848K/8037K, paused 107ms
+01-09 10:45:15.020: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:45:15.020: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:45:15.035: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:45:15.045: D/SMACK(19775): 10:45:15 上午 SENT (1081851280):
+01-09 10:45:30.815: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:45:30.815: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:45:30.960: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:45:30.965: D/SMACK(19775): 10:45:30 上午 SENT (1081851280):
+01-09 10:45:40.035: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:45:40.035: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:45:40.045: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:45:40.050: D/SMACK(19775): 10:45:40 上午 SENT (1081851280):
+01-09 10:45:55.860: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:45:55.860: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:45:56.005: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:45:56.010: D/SMACK(19775): 10:45:56 上午 SENT (1081851280):
+01-09 10:46:05.020: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:46:05.020: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:46:05.030: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:46:05.045: D/SMACK(19775): 10:46:05 上午 SENT (1081851280):
+01-09 10:46:20.260: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:46:20.260: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:46:20.275: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:46:20.285: D/SMACK(19775): 10:46:20 上午 SENT (1081851280):
+01-09 10:46:30.000: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:46:30.000: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:46:30.005: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:46:30.005: D/SMACK(19775): 10:46:30 上午 SENT (1081851280):
+01-09 10:46:36.430: D/networkobserver(19775): PfDataTransReceiver receive action android.net.conn.CONNECTIVITY_CHANGE
+01-09 10:46:37.060: D/networkobserver(19775): 没有网络准备断掉xmpp
+01-09 10:46:37.095: D/xmppPush(19775): push service commnad recieve
+01-09 10:46:37.095: D/xmppPush(19775): do disconnect
+01-09 10:46:37.160: D/XMPPConnection(19775): 准备断开链接...
+01-09 10:46:37.160: D/XMPPConnection(19775): 准备关闭工作....
+01-09 10:46:37.160: D/PacketWriter(19775): 准备发送packet done = false
+01-09 10:46:37.160: D/PacketWriter(19775): 准备唤醒等待队列
+01-09 10:46:37.160: D/PacketWriter(19775): 写出数据
+01-09 10:46:37.160: D/SMACK(19775): 10:46:37 上午 SENT (1081851280): <presence id="81wlI-16" type="unavailable"></presence>
+01-09 10:46:37.160: D/PacketWriter(19775): 准备从队列获取packet
+01-09 10:46:37.160: D/PacketWriter(19775): 队列已无消息，线程进入等待阶段 等待被唤醒
+01-09 10:46:37.165: D/SMACK(19775): 10:46:37 上午 Connection closed (1081851280)
+01-09 10:46:37.165: D/PacketReader(19775): PacketReader shutdown finished....
+01-09 10:46:37.165: D/PacketWriter(19775): 准备关闭工作...
+01-09 10:46:37.165: D/PacketWriter(19775): 唤醒等待中的队列
+01-09 10:46:37.165: D/PacketWriter(19775): shut down 函数已经被调用。线程准备关闭了
+01-09 10:46:37.170: D/PacketWriter(19775): 关闭前把队列还没有发送的消息发送出去
+01-09 10:46:37.170: D/PacketWriter(19775): 清空队列
+01-09 10:46:37.170: D/SMACK(19775): 10:46:37 上午 SENT (1081851280): </stream:stream>
+01-09 10:46:37.170: D/PacketWriter(19775): 线程结束
+01-09 10:46:37.195: D/PacketWriter(19775): shutdown finished...
+01-09 10:46:42.740: D/networkobserver(19775): PfDataTransReceiver receive action android.net.conn.CONNECTIVITY_CHANGE
+01-09 10:46:42.795: D/networkobserver(19775): 有网络了，请重连xmpp
+01-09 10:46:42.815: D/xmppPush(19775): push service commnad recieve
+01-09 10:46:44.925: W/System.err(19775): org.json.JSONException: End of input at character 0 of
+01-09 10:46:44.925: W/System.err(19775): 	at org.json.JSONTokener.syntaxError(JSONTokener.java:446)
+01-09 10:46:44.925: W/System.err(19775): 	at org.json.JSONTokener.nextValue(JSONTokener.java:93)
+01-09 10:46:44.925: W/System.err(19775): 	at org.json.JSONObject.<init>(JSONObject.java:154)
+01-09 10:46:44.925: W/System.err(19775): 	at org.json.JSONObject.<init>(JSONObject.java:171)
+01-09 10:46:44.925: W/System.err(19775): 	at com.fanxer.jy.json.AccountInfo.getFromJsonText(AccountInfo.java:31)
+01-09 10:46:44.925: W/System.err(19775): 	at com.fanxer.jy.ReLoginTask.onPostExecute(ReLoginTask.java:63)
+01-09 10:46:44.925: W/System.err(19775): 	at com.fanxer.jy.ReLoginTask.onPostExecute(ReLoginTask.java:1)
+01-09 10:46:44.925: W/System.err(19775): 	at android.os.AsyncTask.finish(AsyncTask.java:417)
+01-09 10:46:44.925: W/System.err(19775): 	at android.os.AsyncTask.access$300(AsyncTask.java:127)
+01-09 10:46:44.925: W/System.err(19775): 	at android.os.AsyncTask$InternalHandler.handleMessage(AsyncTask.java:429)
+01-09 10:46:44.925: W/System.err(19775): 	at android.os.Handler.dispatchMessage(Handler.java:99)
+01-09 10:46:44.925: W/System.err(19775): 	at android.os.Looper.loop(Looper.java:123)
+01-09 10:46:44.930: W/System.err(19775): 	at android.app.ActivityThread.main(ActivityThread.java:3691)
+01-09 10:46:44.930: W/System.err(19775): 	at java.lang.reflect.Method.invokeNative(Native Method)
+01-09 10:46:44.930: W/System.err(19775): 	at java.lang.reflect.Method.invoke(Method.java:507)
+01-09 10:46:44.930: W/System.err(19775): 	at com.android.internal.os.ZygoteInit$MethodAndArgsCaller.run(ZygoteInit.java:847)
+01-09 10:46:44.930: W/System.err(19775): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:605)
+01-09 10:46:44.930: W/System.err(19775): 	at dalvik.system.NativeStart.main(Native Method)
+01-09 10:46:47.160: D/xmppPush(19775): doConnect xppstatus=0
+01-09 10:46:47.160: D/XMPPConnection(19775): 初始化Socket....
+01-09 10:46:47.230: D/SMACK(19775): 10:46:47 上午 RCV  (1081851280): </stream:stream>
+01-09 10:46:47.240: D/XMPPConnection(19775): XMPPConnection shutdown finished...
+01-09 10:46:57.760: D/XMPPConnection(19775): initConnection isFirstInitialization = true usingCompression = false
+01-09 10:46:57.760: D/XMPPConnection(19775): init reader and writer
+01-09 10:46:57.760: D/PacketWriter(19775): 初始化 Writer 线程
+01-09 10:46:57.760: D/PacketReader(19775): 初始化 Reader 线程
+01-09 10:46:57.760: D/XMPPConnection(19775): 启动 Writer 线程
+01-09 10:46:57.760: D/XMPPConnection(19775): 启动 Reader 线程
+01-09 10:46:57.760: D/PacketWriter(19775): write packets ready~ frist open stream
+01-09 10:46:57.760: D/SMACK(19775): 10:46:57 上午 SENT (1082324296): <stream:stream to="chat1.ishuangshuang.com" xmlns="jabber:client" xmlns:stream="http://etherx.jabber.org/streams" version="1.0">
+01-09 10:46:57.760: D/PacketWriter(19775): 准备从队列获取packet
+01-09 10:46:57.760: D/PacketWriter(19775): 队列已无消息，线程进入等待阶段 等待被唤醒
+01-09 10:46:57.760: D/PacketReader(19775): PacketReader 启动。准备获取信号量 初始化信号量为 1
+01-09 10:46:57.760: D/PacketReader(19775): PacketReader 获取到信号量，继续执行...
+01-09 10:47:07.730: W/System.err(19775): org.apache.http.conn.ConnectTimeoutException: Connect to /111.13.100.20:80 timed out
+01-09 10:47:07.730: W/System.err(19775): 	at org.apache.http.conn.scheme.PlainSocketFactory.connectSocket(PlainSocketFactory.java:121)
+01-09 10:47:07.730: W/System.err(19775): 	at org.apache.http.impl.conn.DefaultClientConnectionOperator.openConnection(DefaultClientConnectionOperator.java:156)
+01-09 10:47:07.735: W/System.err(19775): 	at org.apache.http.impl.conn.AbstractPoolEntry.open(AbstractPoolEntry.java:164)
+01-09 10:47:07.735: W/System.err(19775): 	at org.apache.http.impl.conn.AbstractPooledConnAdapter.open(AbstractPooledConnAdapter.java:119)
+01-09 10:47:07.735: W/System.err(19775): 	at org.apache.http.impl.client.DefaultRequestDirector.execute(DefaultRequestDirector.java:359)
+01-09 10:47:07.735: W/System.err(19775): 	at org.apache.http.impl.client.AbstractHttpClient.execute(AbstractHttpClient.java:555)
+01-09 10:47:07.735: W/System.err(19775): 	at org.apache.http.impl.client.AbstractHttpClient.execute(AbstractHttpClient.java:487)
+01-09 10:47:07.735: W/System.err(19775): 	at org.apache.http.impl.client.AbstractHttpClient.execute(AbstractHttpClient.java:465)
+01-09 10:47:07.735: W/System.err(19775): 	at com.baidu.location.g$1.run(Unknown Source)
+01-09 10:47:10.375: D/XMPPConnection(19775): 准备关闭工作....
+01-09 10:47:10.375: D/PacketWriter(19775): 准备发送packet done = false
+01-09 10:47:10.375: D/PacketWriter(19775): 准备唤醒等待队列
+01-09 10:47:10.375: D/PacketReader(19775): PacketReader shutdown finished....
+01-09 10:47:10.375: D/PacketWriter(19775): 写出数据
+01-09 10:47:10.375: D/SMACK(19775): 10:47:10 上午 SENT (1082324296): <presence id="81wlI-17" type="unavailable"></presence>
+01-09 10:47:10.375: D/PacketWriter(19775): 准备关闭工作...
+01-09 10:47:10.375: D/PacketWriter(19775): 唤醒等待中的队列
+01-09 10:47:10.375: D/PacketWriter(19775): shutdown finished...
+01-09 10:47:10.380: D/PacketWriter(19775): 线程结束
+01-09 10:47:10.530: D/XMPPConnection(19775): XMPPConnection shutdown finished...
+01-09 10:47:10.530: W/System.err(19775): java.net.SocketException: Connection reset by peer
+01-09 10:47:10.530: W/System.err(19775): 	at org.apache.harmony.luni.platform.OSNetworkSystem.read(Native Method)
+01-09 10:47:10.530: W/System.err(19775): 	at dalvik.system.BlockGuard$WrappedNetworkSystem.read(BlockGuard.java:273)
+01-09 10:47:10.530: W/System.err(19775): 	at org.apache.harmony.luni.net.PlainSocketImpl.read(PlainSocketImpl.java:458)
+01-09 10:47:10.530: W/System.err(19775): 	at org.apache.harmony.luni.net.SocketInputStream.read(SocketInputStream.java:85)
+01-09 10:47:10.530: W/System.err(19775): 	at java.io.InputStreamReader.read(InputStreamReader.java:255)
+01-09 10:47:10.530: W/System.err(19775): 	at java.io.BufferedReader.read(BufferedReader.java:311)
+01-09 10:47:10.530: W/System.err(19775): 	at org.jivesoftware.smack.util.ObservableReader.read(ObservableReader.java:42)
+01-09 10:47:10.530: W/System.err(19775): 	at org.kxml2.io.KXmlParser.peek(KXmlParser.java:925)
+01-09 10:47:10.530: W/System.err(19775): 	at org.kxml2.io.KXmlParser.peekType(KXmlParser.java:589)
+01-09 10:47:10.530: W/System.err(19775): 	at org.kxml2.io.KXmlParser.nextImpl(KXmlParser.java:333)
+01-09 10:47:10.530: W/System.err(19775): 	at org.kxml2.io.KXmlParser.next(KXmlParser.java:1378)
+01-09 10:47:10.530: W/System.err(19775): 	at org.jivesoftware.smack.PacketReader.parsePackets(PacketReader.java:335)
+01-09 10:47:10.530: W/System.err(19775): 	at org.jivesoftware.smack.PacketReader.access$1(PacketReader.java:230)
+01-09 10:47:10.530: W/System.err(19775): 	at org.jivesoftware.smack.PacketReader$1.run(PacketReader.java:78)
+01-09 10:47:12.760: D/PacketWriter(19775): 准备关闭工作...
+01-09 10:47:12.760: D/PacketWriter(19775): 唤醒等待中的队列
+01-09 10:47:12.760: D/PacketWriter(19775): shutdown finished...
+01-09 10:47:12.760: D/PacketReader(19775): PacketReader shutdown finished....
+01-09 10:47:12.760: E/XMPP(19775): 服务器连接失败 Connection failed. No response from server.:
+01-09 10:47:17.015: D/定位(19775): 接收到位置：39.917676 116.453533 code:161
+01-09 10:47:41.990: D/定位(19775): use current:uploadMyLocation lat:39.917676 long:116.453533
+01-09 10:48:44.875: D/networkobserver(19775): PfDataTransReceiver receive action android.net.conn.CONNECTIVITY_CHANGE
+01-09 10:48:44.980: D/networkobserver(19775): 有网络了，请重连xmpp
+01-09 10:48:45.075: D/xmppPush(19775): push service commnad recieve
+01-09 10:48:45.075: D/xmppPush(19775): doConnect xppstatus=0
+01-09 10:48:52.470: D/networkobserver(19775): PfDataTransReceiver receive action android.net.conn.CONNECTIVITY_CHANGE
+01-09 10:48:52.620: D/networkobserver(19775): 有网络了，请重连xmpp
+01-09 10:48:52.650: D/networkobserver(19775): PfDataTransReceiver receive action android.net.conn.CONNECTIVITY_CHANGE
+01-09 10:48:52.650: D/networkobserver(19775): 有网络了，请重连xmpp
+01-09 10:48:52.655: D/xmppPush(19775): push service commnad recieve
+01-09 10:48:52.655: D/xmppPush(19775): push service commnad recieve
+01-09 10:48:53.125: D/xmppPush(19775): push service commnad recieve
+01-09 10:48:53.285: D/dalvikvm(19775): GC_CONCURRENT freed 1872K, 53% free 4315K/9031K, external 7848K/8037K, paused 2ms+4ms
+01-09 10:48:53.470: D/定位(19775): use current:uploadMyLocation lat:39.917676 long:116.453533
+01-09 10:48:53.530: D/xmppPush(19775): push service commnad recieve
+01-09 10:48:53.745: D/定位(19775): use current:uploadMyLocation lat:39.917676 long:116.453533
+01-09 10:48:55.855: D/xmppPush(19775): push service commnad recieve
+01-09 10:48:55.985: D/dalvikvm(19775): GC_CONCURRENT freed 2180K, 54% free 4183K/9031K, external 7848K/8037K, paused 4ms+6ms
+01-09 10:48:56.150: D/定位(19775): use current:uploadMyLocation lat:39.917676 long:116.453533
+01-09 10:49:03.210: D/MainUiActivity(19775): set unread msg count
+01-09 10:49:03.215: D/MessageDB(19775): get count exec sql : SELECT * FROM message_t WHERE isReaded = 0
+01-09 10:49:03.215: D/MessageDB(19775): get unread msg count: 1
+01-09 10:49:03.215: D/CrowdFragment(19775): onResume
+01-09 10:49:03.215: D/CrowdFragment(19775): onResume
+01-09 10:49:03.405: I/AsyncLoadAdapterWrapper(19775): position0
+01-09 10:49:03.410: I/ImageLoader(19775): Load image from memory cache [http://file.ishuangshuang.com/lv/public/icon/28/90/1fb95a43eea8bd13a1581addb7b4_160.jpg_480x800]
+01-09 10:49:03.410: I/AsyncLoadAdapterWrapper(19775): position0
+01-09 10:49:03.410: I/ImageLoader(19775): Load image from memory cache [http://file.ishuangshuang.com/lv/public/icon/28/90/1fb95a43eea8bd13a1581addb7b4_160.jpg_480x800]
+01-09 10:49:03.605: D/CLIPBOARD(19775): Hide Clipboard dialog at Starting input: finished by someone else... !
+01-09 10:49:03.610: W/IInputConnectionWrapper(19775): showStatusIcon on inactive InputConnection
+01-09 10:49:23.640: D/dalvikvm(19775): GC_FOR_MALLOC freed 740K, 55% free 4070K/9031K, external 6742K/8037K, paused 101ms
+01-09 10:49:23.640: I/dalvikvm-heap(19775): Grow heap (frag case) to 13.204MB for 87396-byte allocation
+01-09 10:49:23.715: D/dalvikvm(19775): GC_FOR_MALLOC freed 26K, 55% free 4129K/9159K, external 6695K/8037K, paused 61ms
+01-09 10:49:23.755: D/dalvikvm(19775): GC_FOR_MALLOC freed 0K, 55% free 4129K/9159K, external 6695K/8037K, paused 28ms
+01-09 10:49:23.755: I/dalvikvm-heap(19775): Grow heap (frag case) to 13.215MB for 87396-byte allocation
+01-09 10:49:23.790: D/dalvikvm(19775): GC_FOR_MALLOC freed 0K, 55% free 4214K/9287K, external 6695K/8037K, paused 27ms
+01-09 10:49:25.415: D/XMPPConnection(19775): 初始化Socket....
+01-09 10:49:25.440: D/XMPPConnection(19775): initConnection isFirstInitialization = true usingCompression = false
+01-09 10:49:25.440: D/XMPPConnection(19775): init reader and writer
+01-09 10:49:25.445: D/PacketWriter(19775): 初始化 Writer 线程
+01-09 10:49:25.445: D/PacketReader(19775): 初始化 Reader 线程
+01-09 10:49:25.445: D/XMPPConnection(19775): 启动 Writer 线程
+01-09 10:49:25.450: D/XMPPConnection(19775): 启动 Reader 线程
+01-09 10:49:25.450: D/PacketWriter(19775): write packets ready~ frist open stream
+01-09 10:49:25.450: D/SMACK(19775): 10:49:25 上午 SENT (1082055592): <stream:stream to="chat1.ishuangshuang.com" xmlns="jabber:client" xmlns:stream="http://etherx.jabber.org/streams" version="1.0">
+01-09 10:49:25.455: D/PacketWriter(19775): 准备从队列获取packet
+01-09 10:49:25.455: D/PacketWriter(19775): 队列已无消息，线程进入等待阶段 等待被唤醒
+01-09 10:49:25.455: D/PacketReader(19775): PacketReader 启动。准备获取信号量 初始化信号量为 1
+01-09 10:49:25.455: D/PacketReader(19775): PacketReader 获取到信号量，继续执行...
+01-09 10:49:25.465: D/SMACK(19775): 10:49:25 上午 RCV  (1082055592): <?xml version='1.0' encoding='UTF-8'?><stream:stream xmlns:stream="http://etherx.jabber.org/streams" xmlns="jabber:client" from="chat1.ishuangshuang.com" id="64226e55" xml:lang="en" version="1.0">
+01-09 10:49:25.475: D/SMACK(19775): 10:49:25 上午 RCV  (1082055592): <stream:features><starttls xmlns="urn:ietf:params:xml:ns:xmpp-tls"></starttls><mechanisms xmlns="urn:ietf:params:xml:ns:xmpp-sasl"><mechanism>PLAIN</mechanism></mechanisms><compression xmlns="http://jabber.org/features/compress"><method>zlib</method></compression><auth xmlns="http://jabber.org/features/iq-auth"/></stream:features>
+01-09 10:49:25.475: D/SMACK(19775): 10:49:25 上午 SENT (1082055592): <starttls xmlns="urn:ietf:params:xml:ns:xmpp-tls"/>
+01-09 10:49:25.490: D/SMACK(19775): 10:49:25 上午 RCV  (1082055592): <proceed xmlns="urn:ietf:params:xml:ns:xmpp-tls"/>
+01-09 10:49:25.500: W/System.err(19775): java.security.KeyStoreException: KeyStore jks implementation not found
+01-09 10:49:25.500: W/System.err(19775): 	at java.security.KeyStore.getInstance(KeyStore.java:119)
+01-09 10:49:25.500: W/System.err(19775): 	at org.jivesoftware.smack.ServerTrustManager.<init>(ServerTrustManager.java:61)
+01-09 10:49:25.500: W/System.err(19775): 	at org.jivesoftware.smack.XMPPConnection.proceedTLSReceived(XMPPConnection.java:874)
+01-09 10:49:25.500: W/System.err(19775): 	at org.jivesoftware.smack.PacketReader.parsePackets(PacketReader.java:277)
+01-09 10:49:25.500: W/System.err(19775): 	at org.jivesoftware.smack.PacketReader.access$1(PacketReader.java:230)
+01-09 10:49:25.500: W/System.err(19775): 	at org.jivesoftware.smack.PacketReader$1.run(PacketReader.java:78)
+01-09 10:49:25.505: D/XMPPConnection(19775): init reader and writer
+01-09 10:49:25.575: D/SMACK(19775): 10:49:25 上午 SENT (1082055592): <stream:stream to="chat1.ishuangshuang.com" xmlns="jabber:client" xmlns:stream="http://etherx.jabber.org/streams" version="1.0">
+01-09 10:49:25.655: D/SMACK(19775): 10:49:25 上午 RCV  (1082055592): <?xml version='1.0' encoding='UTF-8'?><stream:stream xmlns:stream="http://etherx.jabber.org/streams" xmlns="jabber:client" from="chat1.ishuangshuang.com" id="64226e55" xml:lang="en" version="1.0"><stream:features><mechanisms xmlns="urn:ietf:params:xml:ns:xmpp-sasl"><mechanism>PLAIN</mechanism></mechanisms><compression xmlns="http://jabber.org/features/compress"><method>zlib</method></compression><auth xmlns="http://jabber.org/features/iq-auth"/></stream:features>
+01-09 10:49:25.665: D/PacketReader(19775): 恢复信号量
+01-09 10:49:25.665: D/XMPPConnection(19775): 链接已成功......
+01-09 10:49:25.665: D/PacketWriter(19775): 启动Alarm机制进行心跳
+01-09 10:49:25.680: D/xmppPush(19775): 服务器连接成功
+01-09 10:49:25.685: D/xmppPush(19775): before login token=CvwIAAAAAAMbutGd3_wcR3AwwJNB09 jid=fxqwe59@chat1.ishuangshuang.com
+01-09 10:49:25.685: D/PacketWriter(19775): 准备发送packet done = false
+01-09 10:49:25.685: D/PacketWriter(19775): 准备唤醒等待队列
+01-09 10:49:25.685: D/PacketWriter(19775): 写出数据
+01-09 10:49:25.690: D/SMACK(19775): 10:49:25 上午 SENT (1082055592): <auth mechanism="PLAIN" xmlns="urn:ietf:params:xml:ns:xmpp-sasl">Znhxd2U1OUBjaGF0MS5pc2h1YW5nc2h1YW5nLmNvbQBmeHF3ZTU5QGNoYXQxLmlzaHVhbmdzaHVhbmcuY29tAEN2d0lBQUFBQUFNYnV0R2QzX3djUjNBd3dKTkIwOQ==</auth>
+01-09 10:49:25.690: D/PacketWriter(19775): 准备从队列获取packet
+01-09 10:49:25.690: D/PacketWriter(19775): 队列已无消息，线程进入等待阶段 等待被唤醒
+01-09 10:49:25.705: D/SMACK(19775): 10:49:25 上午 RCV  (1082055592): <success xmlns="urn:ietf:params:xml:ns:xmpp-sasl"/>
+01-09 10:49:25.705: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:49:25.705: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:49:25.725: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:49:25.730: D/SMACK(19775): 10:49:25 上午 SENT (1082055592): <stream:stream to="chat1.ishuangshuang.com" xmlns="jabber:client" xmlns:stream="http://etherx.jabber.org/streams" version="1.0">
+01-09 10:49:25.735: D/coupleIM(19775): Smack Listener Processor (19):logicDispatcher : on parse packet.....
+01-09 10:49:25.735: E/TAG(19775): the packet is not message...
+01-09 10:49:25.750: D/SMACK(19775): 10:49:25 上午 RCV  (1082055592): <?xml version='1.0' encoding='UTF-8'?><stream:stream xmlns:stream="http://etherx.jabber.org/streams" xmlns="jabber:client" from="chat1.ishuangshuang.com" id="64226e55" xml:lang="en" version="1.0"><stream:features><compression xmlns="http://jabber.org/features/compress"><method>zlib</method></compression><bind xmlns="urn:ietf:params:xml:ns:xmpp-bind"/><session xmlns="urn:ietf:params:xml:ns:xmpp-session"/></stream:features>
+01-09 10:49:25.750: D/PacketReader(19775): 恢复信号量
+01-09 10:49:25.750: D/PacketWriter(19775): 准备发送packet done = false
+01-09 10:49:25.750: D/PacketWriter(19775): 准备唤醒等待队列
+01-09 10:49:25.750: D/PacketWriter(19775): 写出数据
+01-09 10:49:25.755: D/SMACK(19775): 10:49:25 上午 SENT (1082055592): <iq id="81wlI-18" type="set"><bind xmlns="urn:ietf:params:xml:ns:xmpp-bind"><resource>359090042497782</resource></bind></iq>
+01-09 10:49:25.755: D/PacketWriter(19775): 准备从队列获取packet
+01-09 10:49:25.755: D/PacketWriter(19775): 队列已无消息，线程进入等待阶段 等待被唤醒
+01-09 10:49:25.760: D/SMACK(19775): 10:49:25 上午 RCV  (1082055592): <iq type="result" id="81wlI-18" to="chat1.ishuangshuang.com/64226e55"><bind xmlns="urn:ietf:params:xml:ns:xmpp-bind"><jid>fxqwe59@chat1.ishuangshuang.com/359090042497782</jid></bind></iq>
+01-09 10:49:25.765: D/PacketWriter(19775): 准备发送packet done = false
+01-09 10:49:25.765: D/PacketWriter(19775): 准备唤醒等待队列
+01-09 10:49:25.765: D/coupleIM(19775): Smack Listener Processor (19):logicDispatcher : on parse packet.....
+01-09 10:49:25.765: E/TAG(19775): the packet is not message...
+01-09 10:49:25.765: D/PacketWriter(19775): 写出数据
+01-09 10:49:25.765: D/SMACK(19775): 10:49:25 上午 SENT (1082055592): <iq id="81wlI-19" type="set"><session xmlns="urn:ietf:params:xml:ns:xmpp-session"/></iq>
+01-09 10:49:25.765: D/PacketWriter(19775): 准备从队列获取packet
+01-09 10:49:25.765: D/PacketWriter(19775): 队列已无消息，线程进入等待阶段 等待被唤醒
+01-09 10:49:25.775: D/SMACK(19775): 10:49:25 上午 RCV  (1082055592): <iq type="result" id="81wlI-19" to="fxqwe59@chat1.ishuangshuang.com/359090042497782"/>
+01-09 10:49:25.780: D/SMACK(19775): User logged (1082055592): fxqwe59@chat1.ishuangshuang.com@chat1.ishuangshuang.com:5222/359090042497782
+01-09 10:49:25.780: D/xmppPush(19775): login 成功
+01-09 10:49:25.780: D/PacketWriter(19775): 准备发送packet done = false
+01-09 10:49:25.780: D/PacketWriter(19775): 准备唤醒等待队列
+01-09 10:49:25.780: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:49:25.780: E/xmppPush(19775): we can not connect the network
+01-09 10:49:25.780: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:49:25.780: E/xmppPush(19775): we can not connect the network
+01-09 10:49:25.780: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:49:25.780: E/xmppPush(19775): we can not connect the network
+01-09 10:49:25.780: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:49:25.780: E/xmppPush(19775): we can not connect the network
+01-09 10:49:25.780: D/xmppPush(19775): doConnect xppstatus=4
+01-09 10:49:25.780: E/xmppPush(19775): we can not connect the network
+01-09 10:49:25.780: D/coupleIM(19775): Smack Listener Processor (19):logicDispatcher : on parse packet.....
+01-09 10:49:25.780: E/TAG(19775): the packet is not message...
+01-09 10:49:25.780: D/PacketWriter(19775): 写出数据
+01-09 10:49:25.780: D/SMACK(19775): 10:49:25 上午 SENT (1082055592): <presence id="81wlI-20"></presence>
+01-09 10:49:25.780: D/PacketWriter(19775): 准备从队列获取packet
+01-09 10:49:25.780: D/PacketWriter(19775): 队列已无消息，线程进入等待阶段 等待被唤醒
+01-09 10:49:40.260: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:49:40.260: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:49:40.275: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:49:50.000: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:49:50.000: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:49:50.005: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:50:00.015: D/xmppPush(19775): receive the timer
+01-09 10:50:00.020: D/xmppPush(19775): network status=1
+01-09 10:50:00.020: D/xmppPush(19775): xmppstatus=4
+01-09 10:50:00.020: D/xmppPush(19775): 网络不可用
+01-09 10:50:05.260: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:50:05.260: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:50:05.275: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:50:05.275: D/SMACK(19775): 10:50:05 上午 SENT (1082055592):
+01-09 10:50:15.020: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:50:15.020: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:50:15.030: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:50:15.035: D/SMACK(19775): 10:50:15 上午 SENT (1082055592):
+01-09 10:50:30.265: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:50:30.265: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:50:30.275: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:50:30.280: D/SMACK(19775): 10:50:30 上午 SENT (1082055592):
+01-09 10:50:36.125: E/ResourceType(19775): Style contains key with bad entry: 0x01010300
+01-09 10:50:36.125: W/KeyCharacterMap(19775): No keyboard for id -1
+01-09 10:50:36.125: W/KeyCharacterMap(19775): Using default keymap: /system/usr/keychars/qwerty.kcm.bin
+01-09 10:50:36.150: I/dalvikvm(19775): Could not find method com.actionbarsherlock.internal.widget.IcsAbsSpinner.resolveSizeAndState, referenced from method com.actionbarsherlock.internal.widget.IcsAbsSpinner.onMeasure
+01-09 10:50:36.150: W/dalvikvm(19775): VFY: unable to resolve static method 6761: Lcom/actionbarsherlock/internal/widget/IcsAbsSpinner;.resolveSizeAndState (III)I
+01-09 10:50:36.150: D/dalvikvm(19775): VFY: replacing opcode 0x71 at 0x0141
+01-09 10:50:36.150: D/dalvikvm(19775): VFY: dead code 0x0144-014b in Lcom/actionbarsherlock/internal/widget/IcsAbsSpinner;.onMeasure (II)V
+01-09 10:50:36.150: I/dalvikvm(19775): Could not find method android.view.ViewGroup.onInitializeAccessibilityEvent, referenced from method com.actionbarsherlock.internal.widget.IcsAdapterView.onInitializeAccessibilityEvent
+01-09 10:50:36.150: W/dalvikvm(19775): VFY: unable to resolve virtual method 3889: Landroid/view/ViewGroup;.onInitializeAccessibilityEvent (Landroid/view/accessibility/AccessibilityEvent;)V
+01-09 10:50:36.150: D/dalvikvm(19775): VFY: replacing opcode 0x6f at 0x0000
+01-09 10:50:36.150: D/dalvikvm(19775): VFY: dead code 0x0003-0033 in Lcom/actionbarsherlock/internal/widget/IcsAdapterView;.onInitializeAccessibilityEvent (Landroid/view/accessibility/AccessibilityEvent;)V
+01-09 10:50:36.150: W/dalvikvm(19775): VFY: unable to find class referenced in signature (Landroid/view/accessibility/AccessibilityNodeInfo;)
+01-09 10:50:36.155: I/dalvikvm(19775): Could not find method android.view.ViewGroup.onInitializeAccessibilityNodeInfo, referenced from method com.actionbarsherlock.internal.widget.IcsAdapterView.onInitializeAccessibilityNodeInfo
+01-09 10:50:36.155: W/dalvikvm(19775): VFY: unable to resolve virtual method 3890: Landroid/view/ViewGroup;.onInitializeAccessibilityNodeInfo (Landroid/view/accessibility/AccessibilityNodeInfo;)V
+01-09 10:50:36.155: D/dalvikvm(19775): VFY: replacing opcode 0x6f at 0x0000
+01-09 10:50:36.155: D/dalvikvm(19775): VFY: dead code 0x0003-0017 in Lcom/actionbarsherlock/internal/widget/IcsAdapterView;.onInitializeAccessibilityNodeInfo (Landroid/view/accessibility/AccessibilityNodeInfo;)V
+01-09 10:50:36.155: I/dalvikvm(19775): Could not find method android.view.ViewGroup.onRequestSendAccessibilityEvent, referenced from method com.actionbarsherlock.internal.widget.IcsAdapterView.onRequestSendAccessibilityEvent
+01-09 10:50:36.155: W/dalvikvm(19775): VFY: unable to resolve virtual method 3892: Landroid/view/ViewGroup;.onRequestSendAccessibilityEvent (Landroid/view/View;Landroid/view/accessibility/AccessibilityEvent;)Z
+01-09 10:50:36.155: D/dalvikvm(19775): VFY: replacing opcode 0x6f at 0x0000
+01-09 10:50:36.155: D/dalvikvm(19775): VFY: dead code 0x0003-0016 in Lcom/actionbarsherlock/internal/widget/IcsAdapterView;.onRequestSendAccessibilityEvent (Landroid/view/View;Landroid/view/accessibility/AccessibilityEvent;)Z
+01-09 10:50:36.155: I/dalvikvm(19775): Could not find method android.widget.PopupWindow.<init>, referenced from method com.actionbarsherlock.internal.widget.IcsListPopupWindow.<init>
+01-09 10:50:36.155: W/dalvikvm(19775): VFY: unable to resolve direct method 4462: Landroid/widget/PopupWindow;.<init> (Landroid/content/Context;Landroid/util/AttributeSet;II)V
+01-09 10:50:36.155: D/dalvikvm(19775): VFY: replacing opcode 0x70 at 0x0058
+01-09 10:50:36.155: D/dalvikvm(19775): VFY: dead code 0x005b-005d in Lcom/actionbarsherlock/internal/widget/IcsListPopupWindow;.<init> (Landroid/content/Context;Landroid/util/AttributeSet;II)V
+01-09 10:50:36.160: E/ResourceType(19775): Style contains key with bad entry: 0x01000000
+01-09 10:50:36.160: E/ResourceType(19775): Style contains key with bad entry: 0x01000000
+01-09 10:50:36.165: E/ResourceType(19775): Style contains key with bad entry: 0x01000000
+01-09 10:50:36.170: E/ResourceType(19775): Style contains key with bad entry: 0x01000000
+01-09 10:50:36.170: E/ResourceType(19775): Style contains key with bad entry: 0x01000000
+01-09 10:50:36.175: E/ResourceType(19775): Style contains key with bad entry: 0x01000000
+01-09 10:50:36.175: E/ResourceType(19775): Style contains key with bad entry: 0x01000000
+01-09 10:50:36.175: E/ResourceType(19775): Style contains key with bad entry: 0x01000000
+01-09 10:50:36.175: E/ResourceType(19775): Style contains key with bad entry: 0x01000000
+01-09 10:50:36.325: D/dalvikvm(19775): GC_EXTERNAL_ALLOC freed 935K, 54% free 4331K/9287K, external 7523K/8037K, paused 29ms
+01-09 10:50:36.520: I/AsyncLoadAdapterWrapper(19775): position0
+01-09 10:50:36.525: I/ImageLoader(19775): Load image from memory cache [http://file.ishuangshuang.com/lv/public/icon/28/90/1fb95a43eea8bd13a1581addb7b4_160.jpg_480x800]
+01-09 10:50:36.525: I/AsyncLoadAdapterWrapper(19775): position0
+01-09 10:50:36.525: I/ImageLoader(19775): Load image from memory cache [http://file.ishuangshuang.com/lv/public/icon/28/90/1fb95a43eea8bd13a1581addb7b4_160.jpg_480x800]
+01-09 10:50:40.015: D/xmpp(19775): the hearbeat alarm recieved
+01-09 10:50:40.015: D/PacketWriter(19775): Alarm 机制发送心跳 开启心跳线程...
+01-09 10:50:40.030: D/PacketWriter(19775): 心跳线程启动...
+01-09 10:50:40.035: D/SMACK(19775): 10:50:40 上午 SENT (1082055592):
+01-09 10:50:44.060: D/MainUiActivity(19775): set unread msg count
+01-09 10:50:44.060: D/MessageDB(19775): get count exec sql : SELECT * FROM message_t WHERE isReaded = 0
+01-09 10:50:44.060: D/MessageDB(19775): get unread msg count: 1
+01-09 10:50:44.065: D/CrowdFragment(19775): onResume
+01-09 10:50:44.065: D/CrowdFragment(19775): onResume
+01-09 10:50:48.310: D/AndroidRuntime(19775): Shutting down VM
+01-09 10:50:48.310: W/dalvikvm(19775): threadid=1: thread exiting with uncaught exception (group=0x40015578)
+01-09 10:50:48.310: E/AndroidRuntime(19775): FATAL EXCEPTION: main
+01-09 10:50:48.310: E/AndroidRuntime(19775): java.lang.NullPointerException
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at com.fanxer.jy.ui.fragment.CrowdFragment.onPrepareOptionsMenu(CrowdFragment.java:266)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.support.v4.app.Watson.onPreparePanel(Watson.java:99)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at com.actionbarsherlock.ActionBarSherlock.callbackPrepareOptionsMenu(ActionBarSherlock.java:580)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at com.actionbarsherlock.internal.ActionBarSherlockCompat.preparePanel(ActionBarSherlockCompat.java:507)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at com.actionbarsherlock.internal.ActionBarSherlockCompat.dispatchInvalidateOptionsMenu(ActionBarSherlockCompat.java:272)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at com.actionbarsherlock.app.SherlockFragmentActivity.invalidateOptionsMenu(SherlockFragmentActivity.java:150)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at com.actionbarsherlock.app.SherlockFragmentActivity.supportInvalidateOptionsMenu(SherlockFragmentActivity.java:156)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.support.v4.app.Fragment.setHasOptionsMenu(Fragment.java:712)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at com.fanxer.jy.ui.fragment.TalkFragment.onCreate(TalkFragment.java:45)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.support.v4.app.FragmentManagerImpl.moveToState(FragmentManager.java:835)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.support.v4.app.FragmentManagerImpl.moveToState(FragmentManager.java:1083)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.support.v4.app.BackStackRecord.run(BackStackRecord.java:635)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.support.v4.app.FragmentManagerImpl.execPendingActions(FragmentManager.java:1431)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.support.v4.app.FragmentManagerImpl$1.run(FragmentManager.java:420)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.os.Handler.handleCallback(Handler.java:587)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.os.Handler.dispatchMessage(Handler.java:92)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.os.Looper.loop(Looper.java:123)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at android.app.ActivityThread.main(ActivityThread.java:3691)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at java.lang.reflect.Method.invokeNative(Native Method)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at java.lang.reflect.Method.invoke(Method.java:507)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at com.android.internal.os.ZygoteInit$MethodAndArgsCaller.run(ZygoteInit.java:847)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:605)
+01-09 10:50:48.310: E/AndroidRuntime(19775): 	at dalvik.system.NativeStart.main(Native Method)
